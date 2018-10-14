@@ -1,0 +1,254 @@
+---
+title: 'Loan Risk Prediction'
+author: "Achmad Gunar Saadi"
+date: "September 13, 2018"
+output:
+  html_document:
+    toc: TRUE
+    toc_depth: 3
+    toc_float:
+      collapsed: FALSE
+    highlight:  pygments
+    theme: spacelab
+    number_sections: TRUE
+editor_options: 
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction {.tabset}
+## Objectives
+__Project: Loan Risk Prediction__<br />
+
+Use any of the 3 classification algorithms (Naive-Bayes, Decision Tree, or Random Forest) to predict the risk status of a bank loan. The variable **default** in the dataset indicates whether the applicant did default on the loan issued by the bank. Start by reading the `loan.csv` dataset in your file Classification in Machine Learning 2 course materials, a dataset that is originally from Professor Dr. Hans Hofmann. 
+
+
+As guidance for good result as below:<br />
+- The pre-processing steps are done, and holding out a test / cross validation set for an estimate of the model's performance on unseen data
+- The model's performance is sufficiently explained (accuracy may not be the most helpful metric here!
+- Demonstrating extra effort in evaluating his/her model, and proposes ways to improve the accuracy obtained from the initial model.
+
+## Data Explanation
+
+This dataset classifies people described by a set of attributes as good or bad credit risks. The response variable is **default**.<br />
+The dataset is originally from Professor Dr. Hans Hofmann and comprises 17 variables as follow:<br />
+
+**checking_balance**: Status of existing checking<br />
+**months_loan_duration**: Duration in month<br />
+**credit_history**: Between critical, good, perfect, poor and very good<br />
+**purpose**: Between business, car(new), car(used), education, furniture and renovations<br />
+**amount**: Credit amount<br />
+**savings_balance**: Status of existing savings account<br />
+**employment_duration**: Present employment since<br />
+**percent_of_income**: Installment rate in percentage of disposable income<br />
+**years_at_residence**: Present residence since<br />
+**Age**: Age applicant in year<br />
+**other_credit**: Other installment plans (bank / store)<br />
+**housing**: Between rent, own, or for free<br />
+**existing_loans_count**: Number of existing credits at this bank<br />
+**job**: Between management, skilled, unskilled and unemployed<br />
+**dependents**: Number of people being liable to provide maintenance for<br />
+**phone**: Between none and yes (registered under customer name)<br />
+**default**: whether the applicant did default on the loan issued by the bank (yes or no)<br />
+
+## Read and understand the Dataset
+This is how the data look like (I only display the first 6 data) and including the 17 variables mentioned before and 1000 observations.<br />
+```{r}
+loans <- read.csv("./loan.csv")
+head(loans)
+str(loans)
+```
+The dataset comprises integer and factor data-type from str().
+
+# Exploring the Data
+## Quick Look the data
+
+By using summary(), we can tell that each variables has various range of value each other. There is no missing value (NA) in the dataset therefore doesn't need to data imputing process.
+```{r}
+summary(loans)
+anyNA(loans)
+```
+
+## Train and Test dataset
+Split the data set into train set (80%) and Test set (20%) by previously shuffle the order of the row of to get unbiased result.
+
+```{r}
+# Proportion: 
+# ************************
+# 80% train and 20% test  
+# ************************
+set.seed(123)
+ind_intrain <- sample(nrow(loans), nrow(loans)*0.8)
+loans_train <- loans[ind_intrain, ]
+loans_test <- loans[-ind_intrain, ]
+```
+
+```{r}
+train_labels <- loans[ind_intrain, 17]
+test_labels <- loans[-ind_intrain, 17]
+prop.table(table(train_labels))
+prop.table(table(test_labels))
+```
+As the above code run, the proportion of the target variable in train and test dataset is dominated by default=no with quite similar proportion.
+
+## Naive-Bayes Method
+```{r}
+library(e1071)
+loans_model <- naiveBayes(default ~ ., loans_train)
+loans_prediction <- predict(loans_model, loans_test[,-17])
+```
+
+### Evaluation of Performance
+```{r}
+table("prediction"=loans_prediction, "actual"=loans_test$default)
+# accuracy
+sum(loans_prediction == test_labels)/nrow(loans_test)
+```
+
+From the table above we can gain information:
+Accuracy=  (118+29)/(118+33+20+29)=147/200= 73.5%
+Recall(sensitivity or true positive rate) = 29/(29+33)=29/62= 46.77%
+Precision= 29/(29+20)=29/49= 59.18%
+Specificity (true negative rate)= 118/(118+20)=118/138= 85.51%
+
+### ROC Curve
+```{r}
+loan_pred_raw<-predict(loans_model,loans_test,type = "raw")
+loans_df<-data.frame("prediction"=loan_pred_raw[,2],"trueValue"=as.numeric(test_labels=="yes"))
+##plot ROC Curve
+library(ROCR)
+loans_roc<-ROCR::prediction(loans_df$prediction,loans_df$trueValue)
+plot(performance(loans_roc,"tpr","fpr"))
+```
+
+## Decision Tree
+
+```{r}
+library(partykit)
+loans_tree_model <- ctree(default ~ ., loans_train)
+plot(loans_tree_model,type="simple")
+loans_tree_model
+width(loans_tree_model)
+depth(loans_tree_model)
+loans_tree_prediction<-predict(loans_tree_model, loans_test[,-17])
+```
+
+### Evaluation of performance
+```{r}
+table("prediction"=loans_tree_prediction, "actual"=loans_test$default)
+#accuracy
+sum(loans_tree_prediction == test_labels)/nrow(loans_test)
+```
+
+From the table above we can gain information:
+Accuracy=  (120+30)/(120+32+18+30)=147/200= 75%
+Recall(sensitivity or true positive rate) = 30/(30+32)= 30/62= 48.39%
+Precision= 30/(30+18)= 30/48= 62.5%
+Specificity (true negative rate)= 120/(120+18)= 120/138= 86.96%
+
+### ROC Curve
+```{r}
+loans_tree_pred_raw<-predict(loans_tree_model, loans_test[,-17], type="prob")
+loans_tree_df<-data.frame("prediction"=loans_tree_pred_raw[,2],"trueValue"=as.numeric(test_labels=="yes"))
+
+##plot ROC Curve
+loans_tree_roc<-ROCR::prediction(loans_tree_df$prediction,loans_tree_df$trueValue)
+plot(performance(loans_tree_roc,"tpr","fpr"))
+```
+
+## Random Forest
+
+```{r eval=F}
+library(caret)
+# This process can be time-consuming
+set.seed(111)
+ctrl <- trainControl(method="repeatedcv", number=5, repeats=3)
+## allowparalel=TRUE
+loans_forest <- train(default ~ ., data=loans_train, method="rf", trainControl = ctrl)
+saveRDS(loans_forest,file="loans_forest.RDS")
+```
+
+```{r}
+loans_forest <-readRDS("loans_forest.RDS")
+```
+
+```{r}
+loans_forest
+```
+
+As have shown above, the largest accuracy gained when random forest using mtry=18, or 18 variables each node splitting. That thing also can be visualized by using plot() function.
+
+```{r}
+plot(loans_forest)
+```
+From the picture, the 18 randomly predictors has the largest accuracy.
+
+### Evaluation of performance
+```{r}
+loans_forest_prediction <- predict(loans_forest, loans_test[,-17])
+table("prediction"=loans_forest_prediction, "actual"=loans_test$default)
+# Check accuracy
+sum(loans_forest_prediction == test_labels)/nrow(loans_test)
+```
+
+From the table above we can gain information:
+Accuracy=  (128+26)/(128+36+10+26)=147/200= 77%
+Recall(sensitivity or true positive rate) = 26/(36+26)= 26/62= 41.94%
+Precision= 26/(26+10)= 26/36= 72.22%
+Specificity (true negative rate)= 128/(128+10)= 128/138= 92.75%
+
+```{r}
+plot(loans_forest$finalModel)
+legend("topright", colnames(loans_forest$finalModel$err.rate),col=1:3,cex=0.8,fill=1:3)
+```
+
+The picture shows that basically random forest has a feature out-of-bag (OOB) estimates inside it. Therefore, there is no need to split the dataset into training and test set beforehand. That is why the black line in the diagram shows the lower error rate than the green line. 
+
+
+# Conclusion
+
+From the confusion matrix to evaluate the perform between naive-bayes, decision tree, and random forest as follow:<br />
+
+**Naive-Bayes Method**<br />
+`Accuracy`=  (118+29)/(118+33+20+29)=147/200= `73.5%`<br />
+`Recall(sensitivity or true positive rate)`= 29/(29+33)=29/62= `46.77%`<br />
+`Precision`= 29/(29+20)=29/49= `59.18%`<br />
+`Specificity (true negative rate)`= 118/(118+20)=118/138= `85.51%`<br />
+
+**Decision Tree**<br />
+`Accuracy`=  (120+30)/(120+32+18+30)=147/200= `75%`<br />
+`Recall(sensitivity or true positive rate)`= 30/(30+32)= 30/62= `48.39%`<br />
+`Precision`= 30/(30+18)= 30/48= `62.5%`<br />
+`Specificity (true negative rate)`= 120/(120+18)= 120/138= `86.96%`<br />
+
+**Random Forest**<br />
+`Accuracy`=  (128+26)/(128+36+10+26)=147/200= `77%`<br />
+`Recall(sensitivity or true positive rate)`= 26/(36+26)= 26/62= `41.94%`<br />
+`Precision`= 26/(26+10)= 26/36= 72.22%<br />
+`Specificity (true negative rate)`= 128/(128+10)= 128/138= 92.75%<br />
+
+The comparison above shows that the  largest accuracy, precision, and specificity is obtained by using `random forest` method. While the largest percentage of recall (sensitivity) is obtained by applying `decision tree` method.
+
+**__There are some ways to be considered to improve the model that have obtained:__**<br />
+
+**Naive-Bayes Method**<br />
+
+* Wheter use smooting or not and the smoothing type
+* The type of data standardization or normalization used
+* The proportion of training and test set splitting
+
+**Decision Tree**<br />
+
+* The setting of Ctree Control parameters (mincriterion, minspit, minbucket)
+* The proportion of training and test set splitting
+* The depth parameter chosen
+* The type of data standardization or normalization used
+
+**Random Forest**<br />
+
+* Whether split the dataset into training and test set previously or not (using OOB estimates feature in random forest)
+* The feature selection (one of examples by using nearZeroVar() function)
+* The number of cross-validation and repeats in trainControl() function
